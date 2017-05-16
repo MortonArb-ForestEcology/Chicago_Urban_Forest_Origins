@@ -162,6 +162,9 @@ plot(spTransform(county.IL[county.IL$COUNTY_NAM=="DUPAGE",], projection(income))
 # writeRaster(landcover, filename="LandCover_Forest")
 test2 <- test
 test2[test!=1] <- NA
+
+test2 <- mask(test2, spTransform(ct1, projection(test2)))
+
 plot(test2)
 plot(test)
 
@@ -171,5 +174,5 @@ ncell(test2)
 ncell(test[test==1])/ncell(test)
 test.summary <- ncells(test)
 
-test2 <- extract(test2, income[income$id==1,], weights=T)
+test3 <- extract(test2, spTransform(ct1, projection(test2)), weights=T)
 plot(landcover[landcover==1])
