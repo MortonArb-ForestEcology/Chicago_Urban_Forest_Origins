@@ -26,8 +26,8 @@ rm(list=ls())
 # --------------------------------------------------------------
 library(rgeos); library(rgdal)
 library(raster)
+library(parallel); library(tictoc)
 library(ggplot2)
-library(progressbar)
 
 # Need to be in the data folder for the geodatabase to read properly
 setwd("~/Desktop/Research/Chicago_Urban_Forest_Origins/data/")
@@ -75,37 +75,72 @@ census       <- spTransform(census      , projection(landcover))
 # 6 = transportation (roads/rail)
 # 7 = other paved
 # -----------------------------------
-summary(census)
-pb <- txtProgressBar(min = 0, max = nrow(census), style = 3)
-for(i in 1:nrow(census)){
-  tract.temp <- census[i,]
+# A function to extract landcover data for an individual tract; has been optimized to avoid certain slow processes
+extract.lc <- function(tract){
+  # tract = spatial polygon data frame for single census tract
+  # census = data frame or spatial polygon data frame for all census data
   
   # Extracting landcover
-  lc.temp <- crop(landcover, tract.temp, filename="landcover_temp", overwrite=T)
-  lc.temp <- mask(lc.temp, tract.temp, filename="landcover_temp_mask", overwrite=T)
+  lc.temp <- crop(landcover, tract, filename=paste0("landcover_temp_", tract$OBJECTID), overwrite=T)
+  lc.mask <- rasterize(tract, lc.temp, mask=T, filename=paste0("landcover_temp_", tract$OBJECTID, "_mask"), overwrite=T)
   
-  tot.cell <- ncell(lc.temp)
-  census[i,"tree"      ] <- ncell(lc.temp[lc.temp==1])/tot.cell
-  census[i,"veg_other" ] <- ncell(lc.temp[lc.temp==2])/tot.cell
-  census[i,"soil_bare" ] <- ncell(lc.temp[lc.temp==3])/tot.cell
-  census[i,"water"     ] <- ncell(lc.temp[lc.temp==4])/tot.cell
-  census[i,"building"  ] <- ncell(lc.temp[lc.temp==5])/tot.cell
-  census[i,"transport" ] <- ncell(lc.temp[lc.temp==6])/tot.cell
-  census[i,"paved_misc"] <- ncell(lc.temp[lc.temp==7])/tot.cell
+  lc.temp <- getValues(lc.mask)
+  lc.temp <- lc.temp[!is.na(lc.temp)]
+  # summary(lc.temp)
   
-  system("rm -f landcover_temp*")
+  tot.cell         <- length(lc.temp) # make sure to skip empty cells
+  tract$tree       <- length(lc.temp[lc.temp==1])/tot.cell
+  tract$veg_other  <- length(lc.temp[lc.temp==2])/tot.cell
+  tract$soil_bare  <- length(lc.temp[lc.temp==3])/tot.cell
+  tract$water      <- length(lc.temp[lc.temp==4])/tot.cell
+  tract$building   <- length(lc.temp[lc.temp==5])/tot.cell
+  tract$transport  <- length(lc.temp[lc.temp==6])/tot.cell
+  tract$paved_misc <- length(lc.temp[lc.temp==7])/tot.cell
   
-  tract.area <- area(tract.temp)
-  tract.1850 <- intersect(forest.1850 , tract.temp)
-  tract.1939 <- intersect(remnant.1939, tract.temp)
-  tract.2010 <- intersect(remnant.2010, tract.temp)
+  files.rm <- paste0("rm -f landcover_temp_", tract$OBJECTID, "*")
+  system(files.rm)
   
-  census[i,"forest_1850" ] <- ifelse(!is.null(tract.1850), area(tract.1850)/tract.area, 0)
-  census[i,"remnant_1939"] <- ifelse(!is.null(tract.1939), area(tract.1850)/tract.area, 0)
-  census[i,"remnant_2010"] <- ifelse(!is.null(tract.2010), area(tract.1850)/tract.area, 0)
+  tract.area <- area(tract)
+  tract.1850 <- intersect(forest.1850 , tract)
+  tract.1939 <- intersect(remnant.1939, tract)
+  tract.2010 <- intersect(remnant.2010, tract)
   
-  setTxtProgressBar(pb, i)
+  tract$forest_1850  <- ifelse(!is.null(tract.1850), sum(area(tract.1850))/tract.area, 0)
+  tract$remnant_1939 <- ifelse(!is.null(tract.1939), sum(area(tract.1939))/tract.area, 0)
+  tract$remnant_2010 <- ifelse(!is.null(tract.2010), sum(area(tract.2010))/tract.area, 0)
+
+  return(tract)
+  # return(census)
 }
+
+# Setting up some new columns in census
+census$tree       <- NA
+census$veg_other  <- NA
+census$soil_bare  <- NA
+census$water      <- NA
+census$building   <- NA
+census$transport  <- NA
+census$paved_misc <- NA
+census$forest_1850  <- NA
+census$remnant_1939 <- NA
+census$remnant_2010 <- NA
+
+
+# Setting up a list of census tracts
+tract.list <- list()
+for(i in 1:nrow(census)){
+  tract.list[[i]] <- census[i,]
+}
+
+tic()
+tract.list <- mclapply(tract.list, extract.lc, mc.cores=6)
+toc()
+
+
+for(i in 1:length(tract.list)){
+  census[i,] <- data.frame(tract.list[[i]])
+}
+summary(census)
 
 # Save the data as a spatial polygon data frame
 out.folder <- "ChicagoRegion_Census_Forests"
@@ -115,3 +150,5 @@ dir.create(out.folder, recursive=T)
 writeOGR(census, "ChicagoRegion_Census_Forests", "ChicagoRegion_Census_Forests", driver="ESRI Shapefile", overwrite_layer=T)
 write.csv(data.frame(census), "ChicagoRegion_Census_Forests.csv", row.names=F)
 # --------------------------------------------------------------
+
+
