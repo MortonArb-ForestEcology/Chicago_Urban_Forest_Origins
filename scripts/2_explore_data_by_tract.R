@@ -39,10 +39,14 @@ summary(census.df)
 # Putting population on an area basis
 census$Population.m2 <- census$POPULATION/(census$Shape_Area*0.093)
 census.df$Population.m2 <- census.df$POPULATION/(census.df$Shape_Area*0.093)
+census.df[census.df$Population.m2==0, "Population.m2"] <- 1e-6
+census[census$Population.m2==0, "Population.m2"] <- 1e-6
+
+census.df[,c("x", "y")] <- coordinates(census)
 summary(census)
 
 # Doing the fortify stuff necessary to make ggplot plot polygons correctly
-census$id <- as.factor(1:nrow(census))
+census$id <- as.factor(0:(nrow(census)-1))
 census.fort <- fortify(census)
 census.fort$id <- as.factor(census.fort$id)
 census.fort <- merge(census.fort, census)
@@ -108,10 +112,11 @@ ggplot(data=tree.analy) +
 dev.off()
 
 census.fort$Pop.rel <- census.fort$POPULATION/max(census.fort$POPULATION)
+census.fort$Dens.rel <- census.fort$Population.m2/max(census.fort$Population.m2)
 census.fort$Earn.rel <- census.fort$MEDIANEARN/max(census.fort$MEDIANEARN)
 summary(census.fort)
 
-maps.demo <- stack(census.fort[,c("forest_1850", "tree", "Pop.rel", "Earn.rel")])
+maps.demo <- stack(census.fort[,c("forest_1850", "tree", "Dens.rel", "Pop.rel", "Earn.rel")])
 names(maps.demo) <- c("values", "layer")
 maps.demo$layer <- recode(maps.demo$layer, "'forest_1850'='Forest, 1850 (%)'; 'tree'='Tree, 2010 (%)'; 'Earn.rel'='Rel Income (%)'; 'Pop.rel'='Rel Population (%)'")
 maps.demo$layer <- factor(maps.demo$layer, levels=c("Forest, 1850 (%)", "Tree, 2010 (%)", "Rel Income (%)", "Rel Population (%)"))
@@ -120,7 +125,7 @@ summary(maps.demo)
 
 map.tree.1850 <- ggplot(census.fort) +
   geom_polygon(aes(x=long, y=lat, group=group, fill=forest_1850*100)) +
-  scale_fill_gradient(high="green3", name="% Forest\nCover", limits=c(0,100)) +
+  scale_fill_gradient(high="green3", name="% Forest\nCover", limits=range(census.fort$forest_1850*100)) +
   coord_equal() +
   theme_bw() +
   ggtitle("Pre-Settlement\nForest Cover") +
@@ -131,7 +136,7 @@ map.tree.1850 <- ggplot(census.fort) +
 
 map.tree.2010 <- ggplot(census.fort) +
   geom_polygon(aes(x=long, y=lat, group=group, fill=tree*100)) +
-  scale_fill_gradient(high="green3", name="% Tree\nCover", limits=c(0,100)) +
+  scale_fill_gradient(high="green3", name="% Tree\nCover", limits=range(census.fort$forest_1850*100)) +
   coord_equal() +
   theme_bw() +
   ggtitle(" \nModern Tree Cover") +
@@ -146,6 +151,17 @@ map.population <- ggplot(census.fort) +
   coord_equal() +
   theme_bw() +
   ggtitle(" \nPopulation") +
+  # theme(legend.position=c(0.87, 0.85)) +
+  theme(plot.title = element_text(hjust=0.5, face="bold"),
+        axis.text  = element_blank(),
+        axis.title = element_blank())
+
+map.density <- ggplot(census.fort[census.fort$Population.m2<max(census.fort$Population.m2),]) +
+  geom_polygon(aes(x=long, y=lat, group=group, fill=Population.m2)) +
+  scale_fill_gradient(high="red2", name="Population\nDensity") +
+  coord_equal() +
+  theme_bw() +
+  ggtitle(" \nPopulation Density") +
   # theme(legend.position=c(0.87, 0.85)) +
   theme(plot.title = element_text(hjust=0.5, face="bold"),
         axis.text  = element_blank(),
@@ -172,6 +188,16 @@ print(map.income    , vp = viewport(layout.pos.row = 2, layout.pos.col=2))
 dev.off()
 
 
+png("figures/trees_vs_demography2.png", width=6, height=8, units="in", res=320)
+grid.newpage()
+pushViewport(viewport(layout=grid.layout(nrow=2,ncol=2)))
+print(map.tree.1850 , vp = viewport(layout.pos.row = 1, layout.pos.col=1))
+print(map.tree.2010 , vp = viewport(layout.pos.row = 1, layout.pos.col=2))
+print(map.density, vp = viewport(layout.pos.row = 2, layout.pos.col=1))
+print(map.income    , vp = viewport(layout.pos.row = 2, layout.pos.col=2))
+dev.off()
+
+
 # Lookign at tree cover and population density
 ggplot(census.fort[census.fort$Population.m2<0.1,]) +
   geom_polygon(aes(x=long, y=lat, group=group, fill=Population.m2)) +
@@ -185,7 +211,7 @@ ggplot(census.fort[census.fort$Population.m2<0.1,]) +
         axis.title = element_blank())
 
 # png("figures/trees_vs_income.png", height=8, width=12, unit="in", res=220)
-ggplot(data=tree.analy[tree.analy$Population.m2<0.3,]) +
+ggplot(data=tree.analy[tree.analy$Population.m2>1e-6,]) +
   facet_grid(.~cover.period) +
   geom_point(aes(x=cover.tree*100, y=log(Population.m2)), size=0.8, color="gray30") +
   geom_smooth(aes(x=cover.tree*100, y=log(Population.m2)), method="lm", color="darkgreen", fill="darkgreen") +
@@ -195,18 +221,18 @@ ggplot(data=tree.analy[tree.analy$Population.m2<0.3,]) +
 # dev.off()
 
 
-ggplot(data=census.df[census.df$Population.m2<0.3,]) +
+ggplot(data=census.df[census.df$Population.m2>1e-6,]) +
   geom_point(aes(x=log(Population.m2), y=MEDIANEARN), size=0.8, color="gray30") +
   geom_smooth(aes(x=log(Population.m2), y=MEDIANEARN), method="lm", color="darkgreen", fill="darkgreen") +
   theme_bw()
 
-ggplot(data=census.df[census.df$Population.m2<0.3,]) +
+ggplot(data=census.df[census.df$Population.m2>1e-6,]) +
   geom_point(aes(x=COLLEGE, y=MEDIANEARN), size=0.8, color="gray30") +
   geom_smooth(aes(x=COLLEGE, y=MEDIANEARN), method="lm", color="darkgreen", fill="darkgreen") +
   theme_bw()
 
 
-ggplot(data=census.df[census.df$Population.m2<0.3,]) +
+ggplot(data=census.df[census.df$Population.m2>1e-6,]) +
   geom_point(aes(x=forest_1850, y=tree), size=0.8, color="gray30") +
   geom_smooth(aes(x=forest_1850, y=tree), method="lm", color="darkgreen", fill="darkgreen") +
   theme_bw()
@@ -218,13 +244,13 @@ census.df$forest_1850 <- census.df$forest_1850*100
 lm.tree <- lm(tree ~ forest_1850, data=census.df)
 summary(lm.tree)
 
-income.density <- lm(MEDIANEARN ~ log(Population.m2), data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
+income.density <- lm(MEDIANEARN ~ log(Population.m2), data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>1e-6,])
 summary(income.density)
 
-income.preset <- lm(MEDIANEARN ~ forest_1850, data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
+income.preset <- lm(MEDIANEARN ~ forest_1850, data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>1e-6,])
 summary(income.preset)
 
-income.trees <- lm(MEDIANEARN ~ tree, data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
+income.trees <- lm(MEDIANEARN ~ tree, data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>1e-6,])
 summary(income.trees)
 
 income.college <- lm(MEDIANEARN ~ COLLEGE, data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
@@ -237,17 +263,55 @@ college.preset <- lm(MEDIANEARN ~ COLLEGE*forest_1850, data=census.df[census.df$
 summary(college.preset)
 
 
-mod.income <- lm(MEDIANEARN ~ tree*forest_1850*COLLEGE + log(Population.m2)*Shape_Area,data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
-summary(mod.income)
+mod.income <- lm(MEDIANEARN ~ forest_1850*COLLEGE*log(Population.m2),data=census.df[census.df$Population.m2>1e-6,])
+mod.income2 <- lm(MEDIANEARN ~ tree*COLLEGE*log(Population.m2),data=census.df[census.df$Population.m2>1e-6,])
 
-mod.tree <- lm(tree ~ forest_1850 + MEDIANEARN*COLLEGE + log(Population.m2)*Shape_Area,data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
+summary(mod.income)
+summary(mod.income2)
+
+
+# mod.tree <- lm(tree ~ forest_1850 + MEDIANEARN*COLLEGE + log(Population.m2)*Shape_Area,data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
 summary(mod.tree)
 
 
-# mod.income2 <- lm(MEDIANEARN ~ forest_1850 + Population.m2 + COLLEGE,data=census.df[census.df$Population.m2<0.3 & census.df$Population.m2>0,])
-# summary(mod.income2)
+mod.income2 <- lm(MEDIANEARN ~ tree*forest_1850*log(Population.m2)*COLLEGE,data=census.df[census.df$Population.m2>1e-6,])
+summary(mod.income2)
 
 library(nlme)
 
 hist(resid(income.density))
+# --------------------------------------------------------------
+
+
+
+# --------------------------------------------------------------
+# Playing around with spatial autocorrelation
+# http://rspatial.org/analysis/rst/3-spauto.html
+# --------------------------------------------------------------
+library(spdep)
+
+sw <- poly2nb(census, row.names=census$id)
+sw2 <- nb2listw(sw, style="B")
+
+
+moran(census$MEDIANEARN, sw2, n=length(sw2$neighbours), S0=Szero(sw2))
+
+moran.test(census$MEDIANEARN, sw2, randomisation = F)
+moran.mc(census$MEDIANEARN, sw2, nsim=1000)
+
+
+library(mgcv)
+library(nlme)
+mod.1850 <- lm(MEDIANEARN ~ forest_1850*COLLEGE*log(Population.m2), data=census.df[census.df$Population.m2>1e-6,])
+summary(mod.1850)
+
+mod.1850.sp <- gls(MEDIANEARN ~ forest_1850*COLLEGE*log(Population.m2), data=census.df[census.df$Population.m2>1e-6,], correlation = corSpher(form=~x + y, nugget=T))
+summary(mod.1850.sp)
+
+mod.2010 <- lm(MEDIANEARN ~ tree*COLLEGE*log(Population.m2),data=census.df[census.df$Population.m2>1e-6,])
+summary(mod.2010)
+
+mod.2010.sp <- gls(MEDIANEARN ~ tree*COLLEGE*log(Population.m2), data=census.df[census.df$Population.m2>1e-6,], correlation = corSpher(form=~x + y, nugget=T))
+summary(mod.2010.sp)
+
 # --------------------------------------------------------------
