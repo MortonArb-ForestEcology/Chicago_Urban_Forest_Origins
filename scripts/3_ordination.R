@@ -7,8 +7,8 @@
 # Steps
 # 1. Read in census polygons & csv; write csv file into data frame because big values got weird
 # 2. Exporatory Graphing
-#     Changes in Distribution of tree cover
-#     Income versus pre-settlement and modern tree cover
+#     Changes in Distribution of PCANCURREN cover
+#     Income versus pre-settlement and modern PCANCURREN cover
 # 3. Very Basic Exploratory Analyses
 #
 # --------------------------------------------------------------
@@ -31,33 +31,41 @@ fig.out <- "~/Google Drive/OriginsSources-CRTI/analyses/figures/"
 # --------------------------------------------------------------
 # 1. Loading in & Formatting Data
 # --------------------------------------------------------------
-census <- readOGR("data/ChicagoRegion_Census_Forests/ChicagoRegion_Census_Forests.shp")
-census.df <- read.csv("data/ChicagoRegion_Census_Forests.csv")
-names(census) <- names(census.df)
+census <- readOGR("data/Census_Block_Canopy/CensusBlockGroupPIncCanopyRemnant.shp")
+
+# Putting some categorical factors as continuous
+census$HOUSINGUNI <- as.numeric(paste(census$HOUSINGUNI))
+census$ESTMEDINC <- as.numeric(paste(census$ESTMEDINC))
+census$MEDAGE <- as.numeric(paste(census$MEDAGE))
+census$OWNER <- as.numeric(paste(census$OWNER))
+census$RENTER <- as.numeric(paste(census$RENTER))
 summary(census)
+
+# Doing the fortify stuff necessary to make ggplot plot polygons correctly
+census$id <- as.factor(0:(nrow(census)-1))
+census.fort <- fortify(census)
+census.fort$id <- as.factor(census.fort$id)
+census.fort <- merge(census.fort, census)
+summary(census.fort)
+
+census.df <- data.frame(census)
+census.df[,c("lon", "lat")] <- coordinates(census)
 summary(census.df)
-
-# Putting population on an area basis
-census$Population.m2 <- census$POPULATION/(census$Shape_Area*0.093)
-census.df$Population.m2 <- census.df$POPULATION/(census.df$Shape_Area*0.093)
-census.df[census.df$Population.m2==0, "Population.m2"] <- 1e-6
-census[census$Population.m2==0, "Population.m2"] <- 1e-6
-
-census.df[,c("x", "y")] <- coordinates(census)
-summary(census)
-
 # --------------------------------------------------------------
 
 
 # --------------------------------------------------------------
-# Playing around with an ordination and then doing an env fit to correlate tree cover
+# Playing around with an ordination and then doing an env fit to correlate PCANCURREN cover
 # --------------------------------------------------------------
 library(vegan); library(labdsv)
 
 # SOme of our variables seem way out of wack, so lets trim it a bit
-demog.use <- census.df$POPULATION>0 & census.df$POPULATION<max(census.df$POPULATION) & census.df$Population.m2<max(census.df$Population.m2) 
-pc.demog <- princomp(~ COLLEGE + HIGHSCHOOL + MEDIANEARN + BELOWPOVER + PMinority + UNEMPLOYME + HOUSEHOLD2 + Population.m2,
+demog.use <- census.df$PINCORP>=0.9 & census.df$HOUSINGDEN>0 & census.df$ESTMEDINC>0
+# pc.demog <- princomp(~ PERBACHELO + ESTMEDINC + BELOWPOVER + NOTMINORIT + UNEMPLOYME + HOUSEHOLD2 + HOUSINGDEN,
+#                      data=census.df[demog.use,], cor=T, scores=T)
+pc.demog <- princomp(~ PERBACHELO + ESTMEDINC + NOTMINORIT + HOUSINGDEN,
                      data=census.df[demog.use,], cor=T, scores=T)
+
 summary(pc.demog)
 
 summary(census.df)
@@ -100,8 +108,11 @@ census.fort$id <- as.factor(census.fort$id)
 census.fort <- merge(census.fort, census)
 summary(census.fort)
 
+demog.use2 <- census.fort$PINCORP>=0.9 & census.fort$HOUSINGDEN>0 & census.fort$ESTMEDINC>0
+
 map.pc1 <- ggplot(data=census.fort) + theme_bw() + coord_equal(expand=0) +
-  geom_polygon(aes(x=long, y=lat, group=group, fill=pc1)) +
+  geom_polygon(aes(x=long, y=lat, group=group), fill="gray50", color="black", size=0.1) +
+  geom_polygon(data=census.fort[demog.use2,],aes(x=long, y=lat, group=group, fill=pc1)) +
   scale_fill_gradient2(low="blue2", high="red3", mid="gray80", midpoint=0, name="PC1") +
   ggtitle(paste0("PCA, PC1 (", round(pc.POV["Comp.1"]*100,1),"%)")) +
   theme(plot.title=element_text(face="bold", hjust=0.5, size=rel(1)))+
@@ -110,7 +121,8 @@ map.pc1 <- ggplot(data=census.fort) + theme_bw() + coord_equal(expand=0) +
         axis.title = element_blank())
 
 map.pc2 <- ggplot(data=census.fort) + theme_bw() + coord_equal(expand=0) +
-  geom_polygon(aes(x=long, y=lat, group=group, fill=pc2)) +
+  geom_polygon(aes(x=long, y=lat, group=group), fill="gray50", color="black", size=0.1) +
+  geom_polygon(data=census.fort[demog.use2,],aes(x=long, y=lat, group=group, fill=pc2)) +
   scale_fill_gradient2(low="blue2", high="red3", mid="gray80", midpoint=0, name="PC2") +
   ggtitle(paste0("PCA, PC2 (", round(pc.POV["Comp.2"]*100,1),"%)")) +
   theme(plot.title=element_text(face="bold", hjust=0.5, size=rel(1)))+
@@ -119,8 +131,9 @@ map.pc2 <- ggplot(data=census.fort) + theme_bw() + coord_equal(expand=0) +
         axis.title = element_blank())
 
 map.tree.1850 <- ggplot(census.fort) +
-  geom_polygon(aes(x=long, y=lat, group=group, fill=forest_1850*100)) +
-  scale_fill_gradient(high="green3", name="% Forest\nCover", limits=range(census.fort$forest_1850*100)) +
+  geom_polygon(aes(x=long, y=lat, group=group), fill="gray50", color="black", size=0.1) +
+  geom_polygon(data=census.fort[demog.use2,],aes(x=long, y=lat, group=group, fill=PFOR1830*100)) +
+  scale_fill_gradient(high="green3", name="% Forest\nCover", limits=range(census.fort$PFOR1830*100)) +
   coord_equal() +
   theme_bw() +
   ggtitle("Pre-Settlement\nForest Cover") +
@@ -130,8 +143,9 @@ map.tree.1850 <- ggplot(census.fort) +
         axis.title = element_blank())
 
 map.tree.2010 <- ggplot(census.fort) +
-  geom_polygon(aes(x=long, y=lat, group=group, fill=tree*100)) +
-  scale_fill_gradient(high="green3", name="% Tree\nCover", limits=range(census.fort$forest_1850*100)) +
+  geom_polygon(aes(x=long, y=lat, group=group), fill="gray50", color="black", size=0.1) +
+  geom_polygon(data=census.fort[demog.use2,],aes(x=long, y=lat, group=group, fill=PCANCURREN*100)) +
+  scale_fill_gradient(high="green3", name="% Tree\nCover", limits=range(census.fort$PFOR1830*100)) +
   coord_equal() +
   theme_bw() +
   ggtitle(" \nModern Tree Cover") +
@@ -153,32 +167,32 @@ dev.off()
 
 
 # --------------------------------------------------------------
-# Correlating current & past tree cover with our demographic PCA
+# Correlating current & past PCANCURREN cover with our demographic PCA
 # --------------------------------------------------------------
-lm.hist.pc1 <- lm(pc1 ~ forest_1850, data=census.df)
-lm.hist.pc2 <- lm(pc2 ~ forest_1850, data=census.df)
-lm.mod.pc1  <- lm(pc1 ~ tree, data=census.df)
-lm.mod.pc2  <- lm(pc2 ~ tree, data=census.df)
+lm.hist.pc1 <- lm(pc1 ~ PFOR1830, data=census.df[demog.use,])
+lm.hist.pc2 <- lm(pc2 ~ PFOR1830, data=census.df[demog.use,])
+lm.mod.pc1  <- lm(pc1 ~ PCANCURREN, data=census.df[demog.use,])
+lm.mod.pc2  <- lm(pc2 ~ PCANCURREN, data=census.df[demog.use,])
 
-hist.pc1 <- ggplot(data=census.df) +
-  geom_point(aes(x=forest_1850, y=pc1)) +
-  stat_smooth(aes(x=forest_1850, y=pc1), method="lm", color="blue", fill="blue", alpha=0.5) +
+hist.pc1 <- ggplot(data=census.df[demog.use,]) +
+  geom_point(aes(x=PFOR1830, y=pc1)) +
+  stat_smooth(aes(x=PFOR1830, y=pc1), method="lm", color="blue", fill="blue", alpha=0.5) +
   ggtitle(paste0("PC1 vs. Settlement Forest (R2=", round(summary(lm.hist.pc1)$r.squared, 2), ")")) +
   theme_bw()
-hist.pc2 <- ggplot(data=census.df) +
-  geom_point(aes(x=forest_1850, y=pc2)) +
-  stat_smooth(aes(x=forest_1850, y=pc2), method="lm", color="blue", fill="blue", alpha=0.5) +
+hist.pc2 <- ggplot(data=census.df[demog.use,]) +
+  geom_point(aes(x=PFOR1830, y=pc2)) +
+  stat_smooth(aes(x=PFOR1830, y=pc2), method="lm", color="blue", fill="blue", alpha=0.5) +
   ggtitle(paste0("PC1 vs. Settlement Forest (R2=", round(summary(lm.hist.pc2)$r.squared, 2), ")")) +
   theme_bw()
 
-mod.pc1 <- ggplot(data=census.df) +
-  geom_point(aes(x=tree, y=pc1)) +
-  stat_smooth(aes(x=tree, y=pc1), method="lm", color="green3", fill="green3", alpha=0.5) +
+mod.pc1 <- ggplot(data=census.df[demog.use,]) +
+  geom_point(aes(x=PCANCURREN, y=pc1)) +
+  stat_smooth(aes(x=PCANCURREN, y=pc1), method="lm", color="green3", fill="green3", alpha=0.5) +
   ggtitle(paste0("PC1 vs. Modern Forest (R2=", round(summary(lm.mod.pc1)$r.squared, 2), ")")) +
   theme_bw()
-mod.pc2 <- ggplot(data=census.df) +
-  geom_point(aes(x=tree, y=pc2))+
-  stat_smooth(aes(x=tree, y=pc2), method="lm", color="green3", fill="green3", alpha=0.5) +
+mod.pc2 <- ggplot(data=census.df[demog.use,]) +
+  geom_point(aes(x=PCANCURREN, y=pc2))+
+  stat_smooth(aes(x=PCANCURREN, y=pc2), method="lm", color="green3", fill="green3", alpha=0.5) +
   ggtitle(paste0("PC2 vs. Modern Forest (R2=", round(summary(lm.mod.pc2)$r.squared, 2), ")")) +
   theme_bw()
 
@@ -192,13 +206,14 @@ print(mod.pc2, vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
 dev.off()
 
 
-# Looking at the effect of tree cover on the ordination 
+# Looking at the effect of PCANCURREN cover on the ordination 
 # 1. calculate the distnace matrix
+# library(vegan)
 demog.dist <- dist(census.df[!is.na(census.df$pc1),c("pc1", "pc2")], diag=T)
-demog.tree <- adonis(demog.dist ~ tree + forest_1850, data=census.df[!is.na(census.df$pc1),])
+demog.tree <- adonis(demog.dist ~ PCANCURREN + PFOR1830, data=census.df[demog.use,])
 demog.tree
 
-env.demog <- envfit(pc.demog ~ tree + forest_1850, data=census.df[!is.na(census.df$pc1),], perm=2e4, na.rm=TRUE)
+env.demog <- envfit(pc.demog ~ PCANCURREN + PFOR1830, data=census.df[demog.use,], perm=2e4, na.rm=TRUE)
 tree.load <- data.frame(env.demog$vectors$arrows)
 tree.load$var <- row.names(tree.load)
 tree.load
@@ -235,9 +250,9 @@ dev.off()
 
 
 
-# re-running the PCA with tree cover
+# re-running the PCA with PCANCURREN cover
 demog.use <- census.df$POPULATION>0 & census.df$POPULATION<max(census.df$POPULATION) & census.df$Population.m2<max(census.df$Population.m2) 
-pc.demog2 <- princomp(~ COLLEGE + HIGHSCHOOL + MEDIANEARN + BELOWPOVER + PMinority + UNEMPLOYME + HOUSEHOLD2 + Population.m2 + tree + forest_1850, data=census.df[demog.use,], cor=T, scores=T)
+pc.demog2 <- princomp(~ PERBACHELO + HIGHSCHOOL + ESTMEDINC + BELOWPOVER + PMinority + UNEMPLOYME + HOUSEHOLD2 + Population.m2 + PCANCURREN + PFOR1830, data=census.df[demog.use,], cor=T, scores=T)
 summary(pc.demog2)
 
 summary(census.df)
@@ -262,15 +277,15 @@ ggplot() +
   theme_bw() +# coord_equal() +
   geom_hline(yintercept=0, size=0.3, color="gray50") + geom_vline(xintercept = 0, size=0.3, color="gray50") +
   geom_point(data=census.df, aes(x=pc1.tree, y=pc2.tree), size=0.2, color="black") +
-  geom_segment(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff) & !pc.loadings2$var %in% c("tree", "forest_1850"),], 
+  geom_segment(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff) & !pc.loadings2$var %in% c("PCANCURREN", "PFOR1830"),], 
                aes(x=0, y=0, xend=load.PC1, yend=load.PC2), 
                arrow=arrow(length=unit(0.3,"cm")), size=1, alpha=0.9, color="red") +
-  geom_text(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff)  & !pc.loadings2$var %in% c("tree", "forest_1850"),], 
+  geom_text(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff)  & !pc.loadings2$var %in% c("PCANCURREN", "PFOR1830"),], 
             aes(x=load.PC1, y=load.PC2, label=var), size = 4, vjust=2, color="red", fontface="bold") +
-  geom_segment(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff) & pc.loadings2$var %in% c("tree", "forest_1850"),], 
+  geom_segment(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff) & pc.loadings2$var %in% c("PCANCURREN", "PFOR1830"),], 
                aes(x=0, y=0, xend=load.PC1, yend=load.PC2), 
                arrow=arrow(length=unit(0.3,"cm")), size=1.5, alpha=0.9, color="blue3") +
-  geom_text(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff)  & pc.loadings2$var %in% c("tree", "forest_1850"),], 
+  geom_text(data=pc.loadings2[(abs(pc.loadings2$Comp.1)>pc.all.cutoff | abs(pc.loadings2$Comp.2)>pc.all.cutoff)  & pc.loadings2$var %in% c("PCANCURREN", "PFOR1830"),], 
             aes(x=load.PC1, y=load.PC2, label=var), size = 5, vjust=2, color="blue3", fontface="bold") +
   
   scale_x_continuous(name=paste0("PC1 (", round(pc.POV2["Comp.1"]*100,1),"%)"), expand=c(0.1,0.1)) +

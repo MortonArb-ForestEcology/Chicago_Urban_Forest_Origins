@@ -118,7 +118,7 @@ dev.off()
 
 png("figures/trees_vs_income.png", height=8, width=12, unit="in", res=220)
 ggplot(data=tree.analy[tree.analy$PINCORP>=0.9 & tree.analy$HOUSINGDEN>0 & tree.analy$ESTMEDINC>0,]) +
-# ggplot(data=tree.analy[,]) +
+  # ggplot(data=tree.analy[,]) +
   facet_grid(.~cover.period) +
   geom_point(aes(x=cover.tree*100, y=ESTMEDINC/1000), size=0.8, color="gray30") +
   geom_smooth(aes(x=cover.tree*100, y=ESTMEDINC/1000), method="lm", color="darkgreen", fill="darkgreen") +
@@ -292,13 +292,13 @@ library(nlme)
 mod.1850 <- lm(ESTMEDINC ~ PFOR1830*PERBACHELO*log(HOUSINGDEN), data=census.df)
 summary(mod.1850)
 
-mod.1850.sp <- gls(ESTMEDINC ~ PFOR1830*PERBACHELO*log(HOUSINGDEN), data=census.df, correlation = corSpher(form=~x + y, nugget=T))
+mod.1850.sp <- gls(ESTMEDINC ~ PFOR1830*PERBACHELO*log(HOUSINGDEN), data=census.df, correlation = corSpher(form=~lon + lat, nugget=T))
 summary(mod.1850.sp)
 
 mod.2010 <- lm(ESTMEDINC ~ PCANCURREN*PERBACHELO*log(HOUSINGDEN),data=census.df)
 summary(mod.2010)
 
-mod.2010.sp <- gls(ESTMEDINC ~ PCANCURREN*PERBACHELO*log(HOUSINGDEN), data=census.df, correlation = corSpher(form=~x + y, nugget=T))
+mod.2010.sp <- gls(ESTMEDINC ~ PCANCURREN*PERBACHELO*log(HOUSINGDEN), data=census.df, correlation = corSpher(form=~lon + lat, nugget=T))
 summary(mod.2010.sp)
 
 # --------------------------------------------------------------
