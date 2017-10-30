@@ -251,8 +251,9 @@ dev.off()
 
 
 # re-running the PCA with PCANCURREN cover
-demog.use <- census.df$POPULATION>0 & census.df$POPULATION<max(census.df$POPULATION) & census.df$Population.m2<max(census.df$Population.m2) 
-pc.demog2 <- princomp(~ PERBACHELO + HIGHSCHOOL + ESTMEDINC + BELOWPOVER + PMinority + UNEMPLOYME + HOUSEHOLD2 + Population.m2 + PCANCURREN + PFOR1830, data=census.df[demog.use,], cor=T, scores=T)
+# demog.use <- census.df$POPULATION>0 & census.df$POPULATION<max(census.df$POPULATION) & census.df$Population.m2<max(census.df$Population.m2) 
+pc.demog2 <- princomp(~ PERBACHELO + ESTMEDINC + NOTMINORIT + HOUSINGDEN + PCANCURREN + PFOR1830, 
+                      data=census.df[demog.use,], cor=T, scores=T)
 summary(pc.demog2)
 
 summary(census.df)
