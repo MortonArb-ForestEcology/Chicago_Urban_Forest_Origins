@@ -32,7 +32,7 @@ fig.out <- "~/Google Drive/OriginsSources-CRTI/analyses/figures/"
 # 1. Loading in & Formatting Data
 # --------------------------------------------------------------
 # census <- readOGR("data/Census_Block_Canopy/CensusBlockGroupPIncCanopyRemnant.shp")
-census <- readOGR("data/Census_Block/BlockGroupData1.shp")
+census <- readOGR("data/Census_Block/BlockGroupData2.shp")
 
 # Putting some categorical factors as continuous
 census$HOUSINGUNI <- as.numeric(paste(census$HOUSINGUNI))
@@ -44,8 +44,9 @@ census$POPULATION <- as.numeric(paste(census$POPULATION))
 summary(census)
 
 # Making Past Canopy cover on a scale of 0-100 like the other modern landover types
-census$PForeste_1 <- census$PForeste_1*100
 census$PFORESTED1 <- census$PFORESTED1*100
+census$dForest <- census$PCanopy_1 - census$PFORESTED1
+summary(census$dForest)
 
 # Doing the fortify stuff necessary to make ggplot plot polygons correctly
 census$id <- as.factor(0:(nrow(census)-1))
@@ -72,12 +73,21 @@ summary(census.df[demog.use,])
 # pc.demog <- princomp(~ PERBACHELO + ESTMEDINC + BELOWPOVER + NOTMINORIT + UNEMPLOYME + HOUSEHOLD2 + HousingDen,
 #                      data=census.df[demog.use,], cor=T, scores=T)
 set.seed(154003)
-pc.demog <- princomp(~  ESTMEDINC + NOTMINORIT + HousingDen + PopDensity + PerOwner + PercentPov + PerUnemplo,
+# # Original list
+# pc.demog <- princomp(~  ESTMEDINC + NOTMINORIT + HousingDen + PopDensity + PerOwner + PercentPov + PerUnemplo + PNOHIGH + PHIGH + PSOMECOLLE + PCOLLEGE + PADVANCED,
+#                      data=census.df[demog.use,], cor=T, scores=T)
+# Closely Correlated Variables:
+#  - Population & housing density  
+#  - college & advanced dgrees closely related
+#  - Whiteness (not minority) & income
+#  - Percent Unemplyment & Percent High school
+#  - Percent No Highschool and percent poverty
+pc.demog <- princomp(~  ESTMEDINC + PopDensity + PerOwner + PercentPov + PerUnemplo + PSOMECOLLE + PCOLLEGE,
                      data=census.df[demog.use,], cor=T, scores=T)
 
 summary(pc.demog)
 
-summary(census.df[demog.use,])
+# summary(census.df[demog.use,])
 
 census.df[demog.use,"pc1"] <- census[demog.use,"pc1"] <- pc.demog$scores[,1]
 census.df[demog.use,"pc2"] <- census[demog.use,"pc2"] <- pc.demog$scores[,2]
@@ -88,6 +98,9 @@ pc.loadings <- data.frame(var=row.names(pc.demog$loadings), pc.demog$loadings[,1
 mult <- min( (max(census.df$pc2, na.rm=T)-min(census.df$pc2, na.rm=T))/(max(pc.loadings$Comp.2, na.rm=T)-min(pc.loadings$Comp.2, na.rm=T)),
              (max(census.df$pc1, na.rm=T)-min(census.df$pc1, na.rm=T))/(max(pc.loadings$Comp.1, na.rm=T)-min(pc.loadings$Comp.1, na.rm=T))
 )
+
+write.csv(pc.loadings, file.path(fig.out, "../PCA_Loadings.csv"), row.names=F)
+
 pc.loadings$load.PC1 <- 0.7*mult*pc.loadings$Comp.1
 pc.loadings$load.PC2 <- 0.7*mult*pc.loadings$Comp.2
 # pc.loadings$var <- c("Water Cap", "AWC (top)", "Tair (yr)", "Tair (JJA)", "Precip (yr)", "Precip (JJA)")
@@ -163,6 +176,18 @@ map.tree.2010 <- ggplot(census.fort) +
         axis.text  = element_blank(),
         axis.title = element_blank())
 
+map.tree.diff <- ggplot(census.fort) +
+  geom_polygon(aes(x=long, y=lat, group=group), fill="gray50", color="black", size=0.1) +
+  geom_polygon(data=census.fort[demog.use2,],aes(x=long, y=lat, group=group, fill=dForest)) +
+  scale_fill_gradient2(high="green3", low="red", mid="black", name="% Tree\nCover") +
+  coord_equal() +
+  theme_bw() +
+  ggtitle(" \nChange in Tree Cover") +
+  # theme(legend.position=c(0.87, 0.85)) +
+  theme(plot.title = element_text(hjust=0.5, face="bold"),
+        axis.text  = element_blank(),
+        axis.title = element_blank())
+
 png(file.path(fig.out, "DemogPCA.png"), height=10, width=8, units="in", res=320)
 grid.newpage()
 pushViewport(viewport(layout = grid.layout(2, 2)))
@@ -171,6 +196,13 @@ print(map.pc2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
 print(map.tree.1850, vp = viewport(layout.pos.row = 2, layout.pos.col = 1))
 print(map.tree.2010, vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
 dev.off()
+
+png(file.path(fig.out, "TreeCover_Change.png"), height=10, width=8, units="in", res=320)
+# grid.newpage()
+# pushViewport(viewport(layout = grid.layout(2, 2)))
+print(map.tree.diff)
+dev.off()
+
 # --------------------------------------------------------------
 
 
@@ -182,6 +214,33 @@ lm.hist.pc1 <- lm(pc1 ~ PFORESTED1, data=census.df[demog.use,])
 lm.hist.pc2 <- lm(pc2 ~ PFORESTED1, data=census.df[demog.use,])
 lm.mod.pc1  <- lm(pc1 ~ PCanopy_1, data=census.df[demog.use,])
 lm.mod.pc2  <- lm(pc2 ~ PCanopy_1, data=census.df[demog.use,])
+
+lm.diff.pc1 <- lm(pc1 ~ dForest, data=census.df[demog.use,])
+lm.diff.pc2 <- lm(pc2 ~ dForest, data=census.df[demog.use,])
+summary(lm.diff.pc1)
+summary(lm.diff.pc2)
+
+d.pc1 <- ggplot(data=census.df[demog.use,]) +
+  geom_point(aes(x=dForest, y=pc1)) +
+  stat_smooth(aes(x=dForest, y=pc1), method="lm", color="blue", fill="blue", alpha=0.5) +
+  ggtitle(paste0("PC1 vs. Change in Forests (R2=", round(summary(lm.diff.pc1)$r.squared, 2), ")")) +
+  theme_bw()
+
+d.pc2 <- ggplot(data=census.df[demog.use,]) +
+  geom_point(aes(x=dForest, y=pc2)) +
+  stat_smooth(aes(x=dForest, y=pc2), method="lm", color="blue", fill="blue", alpha=0.5) +
+  ggtitle(paste0("PC2 vs. Change in Forests (R2=", round(summary(lm.diff.pc2)$r.squared, 2), ")")) +
+  theme_bw()
+
+
+png(file.path(fig.out, "PCA_ForestChange.png"), height=10, width=8, units="in", res=320)
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(1, 2)))
+print(d.pc1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+print(d.pc2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+dev.off()
+
+
 
 hist.pc1 <- ggplot(data=census.df[demog.use,]) +
   geom_point(aes(x=PFORESTED1, y=pc1)) +
@@ -268,7 +327,7 @@ dev.off()
 
 # re-running the PCA with PCanopy_1 cover
 # demog.use <- census.df$POPULATION>0 & census.df$POPULATION<max(census.df$POPULATION) & census.df$Population.m2<max(census.df$Population.m2) 
-pc.demog2 <- princomp(~ ESTMEDINC + NOTMINORIT + HousingDen + PopDensity + PerOwner + PercentPov + PerUnemplo + PCanopy_1 + PFORESTED1, 
+pc.demog2 <- princomp(~ ESTMEDINC + PopDensity + PerOwner + PercentPov + PerUnemplo + PSOMECOLLE + PCOLLEGE + PCanopy_1 + PFORESTED1, 
                       data=census.df[demog.use,], cor=T, scores=T)
 summary(pc.demog2)
 
