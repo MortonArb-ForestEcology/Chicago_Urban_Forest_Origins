@@ -22,11 +22,17 @@ dev.off()
 library(sp); library(rgdal); library(raster)
 bm.sp <- SpatialPixelsDataFrame(points=bm.df[,c("x", "y")], data=data.frame(bm.df[,c("Biomass")]), proj4string = CRS("+init=epsg:3175"))
 
-png(file.path(path.drive, "analyses/figures/Biomass_PLS2.png"), height=8, width=8, unit="in", res=320)
-plot(bm.sp)
-dev.off()
 
 bm.sp <- raster(bm.sp)
 names(bm.sp) <- "Biomass-Total"
 
-writeRaster(bm.sp, filename=file.path(path.drive, "analyses/data/PalEON_Biomass/PLS_biomass_western_point_v0.999_TOTAL"), overwrite=T)
+png(file.path(path.drive, "analyses/figures/Biomass_PLS2.png"), height=8, width=8, unit="in", res=320)
+plot(bm.sp)
+dev.off()
+
+writeRaster(bm.sp, filename=file.path(path.drive, "analyses/data/PalEON_Biomass/PLS_biomass_western_point_v0.999_TOTAL.tif"), overwrite=T, format="GTiff")
+
+test <- raster(file.path(path.drive, "analyses/data/PalEON_Biomass/PLS_biomass_western_point_v0.999_TOTAL.tif"))
+test
+# projection(test) <- CRS("+init=epsg:3175")
+plot(test)
